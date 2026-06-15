@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,13 @@ class Settings(BaseSettings):
     telegram_worker_session: str = "./data/telethon.session"
     poll_interval_seconds: int = 30
     initial_posts_limit: int = 20
+
+    @field_validator("api_user_id", "telegram_api_id", "telegram_api_hash", "telegram_bot_token", mode="before")
+    @classmethod
+    def empty_string_as_none(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
 
 
 settings = Settings()
