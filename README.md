@@ -62,4 +62,40 @@ Every tenant-owned entity includes `user_id`. Posts store both `raw_text` and `t
 
 ## Current Scope
 
-Foundation provides runnable service shells, Docker Compose, PostgreSQL and MinIO wiring, initial DB migrations, base API routes, the three-column frontend shell, and an idle Telethon worker ready for Phase 1 channel monitoring.
+Foundation provides runnable service shells, Docker Compose, PostgreSQL and MinIO wiring, initial DB migrations, base API routes, and the three-column frontend shell.
+
+Phase 1 now adds the first end-to-end content loop:
+
+- Telegram Login endpoint.
+- Adding public channels by `@username`.
+- Worker-side channel metadata validation through Telethon.
+- Worker-side ingestion of latest and new posts.
+- Post search and filters by source/date/status.
+- Draft editing with `raw_text` plus `telegram_entities` JSON.
+- Media metadata operations for add, remove, reorder, and replace flows.
+- Publish task queue for Telegram Bot API text, photo, and media group publishing.
+
+## API Notes
+
+During MVP development, authenticated API routes use `X-User-ID` when provided. If it is missing, the API creates and uses a development user. This keeps the data model tenant-ready while allowing local development before session management is added.
+
+Important endpoints:
+
+- `POST /api/auth/telegram`
+- `GET /api/sources`
+- `POST /api/sources`
+- `GET /api/posts`
+- `PATCH /api/posts/:id/draft`
+- `POST /api/posts/ingest`
+- `POST /api/publish_tasks`
+
+## Worker Notes
+
+The worker uses one technical Telegram account for public-channel monitoring. Configure:
+
+- `TELEGRAM_API_ID`
+- `TELEGRAM_API_HASH`
+- `TELEGRAM_WORKER_SESSION`
+- `TELEGRAM_BOT_TOKEN`
+
+The first Telethon session authorization is interactive when run locally. For production, create the session file once and mount it into the worker container.

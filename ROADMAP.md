@@ -2,12 +2,12 @@
 
 ## Phase 1
 
-- Telegram Login.
-- Adding public Telegram channels by `@username`.
-- Channel validation and fetching latest posts before connecting.
-- Channel monitoring with one technical Telethon account.
-- Post parsing.
-- Telegram Markdown support.
+- Telegram Login. Initial endpoint implemented.
+- Adding public Telegram channels by `@username`. Initial API/UI implemented.
+- Channel validation and fetching latest posts before connecting. Worker metadata refresh and initial ingestion implemented.
+- Channel monitoring with one technical Telethon account. Polling worker implemented.
+- Post parsing. Raw text and entities ingestion implemented.
+- Telegram Markdown support. Draft text and Bot API parse mode foundation implemented.
 - Modern Telegram entities support:
   - bold
   - italic
@@ -20,14 +20,14 @@
   - links
   - custom emoji
   - other Telegram entities.
-- Text editing.
+- Text editing. Draft save implemented.
 - Image editing:
   - add images
   - remove images
   - reorder images
   - replace images.
-- Draft saving.
-- Publishing through Telegram Bot API:
+- Draft saving. Implemented.
+- Publishing through Telegram Bot API. Queue and worker implemented:
   - text
   - images
   - media groups.
