@@ -36,6 +36,7 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, cfg config.Config) {
 	api.Use(server.userContext)
 	api.GET("/sources", server.listSources)
 	api.POST("/sources", server.createSource)
+	api.PATCH("/sources/:id", server.updateSource)
 	api.GET("/posts", server.listPosts)
 	api.GET("/posts/:id", server.getPost)
 	api.PATCH("/posts/:id/draft", server.saveDraft)
@@ -243,6 +244,32 @@ func (s Server) createSource(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusCreated, gin.H{"source": source})
+}
+
+func (s Server) updateSource(ctx *gin.Context) {
+	id, err := uuid.Parse(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid source id"})
+		return
+	}
+	var req sourceRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	updates := map[string]any{
+		"title":               req.Title,
+		"description":         req.Description,
+		"telegram_channel_id": req.TelegramChannelID,
+		"last_message_id":     req.LastMessageID,
+		"checked_at":          time.Now().UTC(),
+		"updated_at":          time.Now().UTC(),
+	}
+	if err := s.db.Model(&models.Source{}).Where("id = ? AND user_id = ?", id, currentUserID(ctx)).Updates(updates).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func normalizeUsername(username string) string {
