@@ -140,4 +140,4 @@ jobs:
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub pull api web worker
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub up -d postgres minio createbuckets api web worker
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub ps
-            curl --fail --silent --show-error http://127.0.0.1:${API_PORT:-8080}/api/health
+            curl --fail --silent --show-error http://127.0.0.1:8080/api/health
