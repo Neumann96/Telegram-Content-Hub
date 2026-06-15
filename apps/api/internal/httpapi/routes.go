@@ -287,7 +287,7 @@ func normalizeUsername(username string) string {
 type postResponse struct {
 	models.Post
 	SourceUsername string         `json:"source_username"`
-	Media          []models.Media `json:"media"`
+	Media          []models.Media `json:"media" gorm:"-"`
 }
 
 func (s Server) listPosts(ctx *gin.Context) {

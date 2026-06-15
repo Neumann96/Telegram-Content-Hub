@@ -102,9 +102,9 @@ jobs:
                         values[key] = value
 
             values.update({
-                "API_IMAGE": "ghcr.io/neumann96/telegram-content-hub-api:${{ github.sha }}",
-                "WEB_IMAGE": "ghcr.io/neumann96/telegram-content-hub-web:${{ github.sha }}",
-                "WORKER_IMAGE": "ghcr.io/neumann96/telegram-content-hub-worker:${{ github.sha }}",
+                "API_IMAGE": "ghcr.io/neumann96/telegram-content-hub-api:latest",
+                "WEB_IMAGE": "ghcr.io/neumann96/telegram-content-hub-web:latest",
+                "WORKER_IMAGE": "ghcr.io/neumann96/telegram-content-hub-worker:latest",
                 "NEXT_PUBLIC_API_URL": "https://telegram-content-hub.147-45-224-216.sslip.io",
                 "WEB_ALLOWED_ORIGINS": "https://telegram-content-hub.147-45-224-216.sslip.io,http://telegram-content-hub.147-45-224-216.sslip.io,http://localhost:3000",
             })
@@ -140,3 +140,4 @@ jobs:
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub pull api web worker
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub up -d postgres minio createbuckets api web worker
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub ps
+            curl --fail --silent --show-error http://127.0.0.1:${API_PORT:-8080}/api/health
