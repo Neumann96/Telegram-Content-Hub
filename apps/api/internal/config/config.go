@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -16,6 +17,7 @@ type Config struct {
 	MinIOBucket          string
 	TelegramBotToken     string
 	TelegramLoginBotName string
+	WebAllowedOrigins    []string
 }
 
 func Load() Config {
@@ -30,6 +32,7 @@ func Load() Config {
 		MinIOBucket:          env("MINIO_BUCKET", "telegram-media"),
 		TelegramBotToken:     env("TELEGRAM_BOT_TOKEN", ""),
 		TelegramLoginBotName: env("TELEGRAM_LOGIN_BOT_USERNAME", ""),
+		WebAllowedOrigins:    csvEnv("WEB_ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
 }
 
@@ -50,4 +53,17 @@ func env(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func csvEnv(key, fallback string) []string {
+	raw := env(key, fallback)
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			values = append(values, part)
+		}
+	}
+	return values
 }

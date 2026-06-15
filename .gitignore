@@ -9,6 +9,7 @@ out/
 dist/
 coverage/
 .cache/
+.local/
 
 bin/
 tmp/
