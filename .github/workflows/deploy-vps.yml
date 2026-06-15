@@ -26,5 +26,21 @@ jobs:
             cd /opt/telegram-content-hub
             git fetch origin master
             git reset --hard origin/master
-            docker compose --env-file .env -p telegram-content-hub up -d --build
+
+            if [ ! -f /swapfile ]; then
+              fallocate -l 2G /swapfile
+              chmod 600 /swapfile
+              mkswap /swapfile
+              swapon /swapfile
+              echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            else
+              swapon /swapfile || true
+            fi
+
+            export COMPOSE_PARALLEL_LIMIT=1
+            docker compose --env-file .env -p telegram-content-hub up -d postgres minio createbuckets
+            nice -n 15 docker compose --env-file .env -p telegram-content-hub build api
+            docker compose --env-file .env -p telegram-content-hub up -d api
+            nice -n 15 docker compose --env-file .env -p telegram-content-hub build web worker
+            docker compose --env-file .env -p telegram-content-hub up -d web worker
             docker compose --env-file .env -p telegram-content-hub ps
