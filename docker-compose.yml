@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-telegram_hub}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-telegram_hub_password}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,8 +24,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -61,7 +61,7 @@ services:
       POSTGRES_HOST: postgres
       MINIO_ENDPOINT: minio:9000
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "127.0.0.1:${API_PORT:-8080}:8080"
 
   web:
     build:
@@ -73,7 +73,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
 
   worker:
     build:
