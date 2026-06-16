@@ -77,7 +77,6 @@ export default function Home() {
   const [selectedSourceId, setSelectedSourceId] = useState("");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState<Post["status"] | "">("");
   const [draftText, setDraftText] = useState("");
   const [draftStatus, setDraftStatus] = useState<Post["status"]>("editing");
@@ -100,10 +99,9 @@ export default function Home() {
     if (selectedSourceId) params.set("source_id", selectedSourceId);
     if (search) params.set("q", search);
     if (dateFrom) params.set("date_from", dateFrom);
-    if (dateTo) params.set("date_to", dateTo);
     if (statusFilter) params.set("status", statusFilter);
     return params;
-  }, [dateFrom, dateTo, search, selectedSourceId, statusFilter]);
+  }, [dateFrom, search, selectedSourceId, statusFilter]);
   const posts = useQuery({
     queryKey: ["posts", user?.id, postParams.toString()],
     queryFn: () => getPosts(postParams),
@@ -320,7 +318,7 @@ export default function Home() {
         </aside>
 
         <section className={cn("border-r p-4", activePanel !== "posts" && "hidden lg:block")}>
-          <div className="mb-4 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_135px_135px_145px]">
+          <div className="mb-4 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_135px_145px]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск" />
@@ -328,10 +326,6 @@ export default function Home() {
             <div className="relative">
               <CalendarDays className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input className="pl-9" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-            </div>
-            <div className="relative">
-              <CalendarDays className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
             </div>
             <select
               className="h-10 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
