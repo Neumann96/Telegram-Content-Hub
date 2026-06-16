@@ -28,13 +28,65 @@ export type Post = {
   media: Media[];
 };
 
+export type Bootstrap = {
+  telegram_login_bot: string;
+  minio_bucket: string;
+  features: string[];
+};
+
+export type TelegramLoginPayload = {
+  id: number;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+};
+
+export type User = {
+  id: string;
+  telegram_id?: number | null;
+  username: string;
+  first_name: string;
+  last_name: string;
+  photo_url: string;
+};
+
 const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const authStorageKey = "telegram-content-hub-user";
+
+export function getStoredUser(): User | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(authStorageKey);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as User;
+  } catch {
+    window.localStorage.removeItem(authStorageKey);
+    return null;
+  }
+}
+
+export function storeUser(user: User) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(authStorageKey, JSON.stringify(user));
+  }
+}
+
+export function clearStoredUser() {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(authStorageKey);
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const user = getStoredUser();
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(user?.id ? { "X-User-ID": user.id } : {}),
       ...init?.headers,
     },
   });
@@ -43,6 +95,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body.error ?? `Request failed: ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+export function getBootstrap() {
+  return request<Bootstrap>("/api/bootstrap");
+}
+
+export function loginWithTelegram(payload: TelegramLoginPayload) {
+  return request<{ user: User }>("/api/auth/telegram", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getSources() {

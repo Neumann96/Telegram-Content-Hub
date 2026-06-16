@@ -1,55 +1,96 @@
 # Telegram Content Hub
 
-MVP web service for monitoring public Telegram channels, editing posts, and publishing prepared content into target Telegram channels.
+Веб-сервис для мониторинга публичных Telegram-каналов, редактирования найденных постов и публикации подготовленного контента в целевые Telegram-каналы.
 
-## Stack
+Проект находится на стадии Phase 1 MVP: базовый контур уже собирается и запускается через Docker Compose, API хранит данные в PostgreSQL, воркер работает с Telegram через Telethon, а веб-интерфейс подключен к реальным API-эндпоинтам.
 
-- Frontend: Next.js, TypeScript, Tailwind, shadcn/ui-style primitives, React Query, Zustand.
+## Что уже есть
+
+- Вход через Telegram Login Widget.
+- Добавление публичных каналов по `@username`.
+- Проверка и обновление метаданных каналов через технический Telethon-аккаунт.
+- Первичная загрузка и дальнейший мониторинг новых постов.
+- Сохранение исходного текста и Telegram entities без потери форматирования.
+- Поиск постов и фильтрация по каналу, дате и статусу.
+- Редактор черновика с сохранением текста и статуса.
+- Метаданные медиа для сценариев добавления, удаления, замены и сортировки изображений.
+- Очередь публикации через Telegram Bot API.
+- Адаптивный интерфейс для desktop, планшетов и мобильных устройств.
+
+## Стек
+
+- Frontend: Next.js, TypeScript, Tailwind CSS, React Query, Zustand.
 - Backend: Go, Gin, GORM, PostgreSQL.
 - Telegram worker: Python, Telethon.
 - Media storage: MinIO.
 - Infra: Docker Compose.
 
-## Repository Layout
+## Структура репозитория
 
 ```text
 apps/
-  api/      Go API, migrations, domain models
-  web/      Next.js operator UI
-  worker/   Telethon monitoring worker
-infra/      Future deployment and local infra assets
+  api/      Go API, миграции и доменные модели
+  web/      Next.js интерфейс оператора
+  worker/   Telethon воркер для мониторинга и публикации
+infra/      Инфраструктурные файлы для локального и будущего production-развертывания
 ```
 
-## Foundation Setup
+## Быстрый старт
 
-1. Copy environment defaults:
+1. Скопируйте пример переменных окружения:
 
    ```bash
    cp .env.example .env
    ```
 
-2. Fill Telegram credentials in `.env` when they are available:
+2. Заполните Telegram-настройки в `.env`:
 
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_LOGIN_BOT_USERNAME`
-   - `TELEGRAM_API_ID`
-   - `TELEGRAM_API_HASH`
+   - `TELEGRAM_BOT_TOKEN` — токен бота для проверки Telegram Login и публикации.
+   - `TELEGRAM_LOGIN_BOT_USERNAME` — username бота без обязательного `@`, используется виджетом входа.
+   - `TELEGRAM_API_ID` и `TELEGRAM_API_HASH` — данные Telegram API для Telethon-воркера.
+   - `TELEGRAM_WORKER_SESSION` — путь к session-файлу технического Telegram-аккаунта.
 
-3. Start local services:
+3. Запустите сервисы:
 
    ```bash
    docker compose up --build
    ```
 
-4. Open:
+4. Откройте:
 
    - Web: http://localhost:3000
    - API health: http://localhost:8080/api/health
    - MinIO console: http://localhost:9001
 
-## Data Model
+## Telegram Login
 
-Foundation creates the SaaS-ready base entities:
+Фронтенд получает имя login-бота из `GET /api/bootstrap`, рендерит Telegram Login Widget и отправляет полученный payload в `POST /api/auth/telegram`.
+
+Если задан `TELEGRAM_BOT_TOKEN`, API проверяет подпись Telegram login hash. После успешного входа фронтенд сохраняет пользователя локально и отправляет его UUID в заголовке `X-User-ID` для последующих запросов.
+
+Для локальной разработки API по-прежнему поддерживает fallback: если `X-User-ID` не передан, создается и используется development-user. Это упрощает запуск без полноценной сессии, но модель данных уже остается tenant-ready.
+
+## Основные API-эндпоинты
+
+- `GET /api/bootstrap`
+- `POST /api/auth/telegram`
+- `GET /api/sources`
+- `POST /api/sources`
+- `PATCH /api/sources/:id`
+- `GET /api/posts`
+- `GET /api/posts/:id`
+- `PATCH /api/posts/:id/draft`
+- `POST /api/posts/ingest`
+- `POST /api/media`
+- `PATCH /api/media/:id`
+- `DELETE /api/media/:id`
+- `POST /api/publish_tasks`
+- `GET /api/publish_tasks/next`
+- `PATCH /api/publish_tasks/:id`
+
+## Модель данных
+
+Базовая схема рассчитана на дальнейшее SaaS-развитие:
 
 - `users`
 - `telegram_accounts`
@@ -58,44 +99,16 @@ Foundation creates the SaaS-ready base entities:
 - `media`
 - `publish_tasks`
 
-Every tenant-owned entity includes `user_id`. Posts store both `raw_text` and `telegram_entities` JSONB so Telegram formatting is not reduced to Markdown.
+Все сущности, принадлежащие пользователю, содержат `user_id`. Посты хранят `raw_text`, `edited_text` и `telegram_entities` в JSONB, поэтому Telegram-форматирование не сводится насильно к Markdown.
 
-## Current Scope
+## Воркер
 
-Foundation provides runnable service shells, Docker Compose, PostgreSQL and MinIO wiring, initial DB migrations, base API routes, and the three-column frontend shell.
+Воркер использует один технический Telegram-аккаунт для мониторинга публичных каналов. Он проверяет доступность API, валидирует каналы, забирает последние и новые посты, а также обрабатывает задачи публикации через Bot API.
 
-Phase 1 now adds the first end-to-end content loop:
+Для первого локального запуска Telethon-сессия авторизуется интерактивно. Для production session-файл нужно создать один раз и примонтировать в контейнер воркера.
 
-- Telegram Login endpoint.
-- Adding public channels by `@username`.
-- Worker-side channel metadata validation through Telethon.
-- Worker-side ingestion of latest and new posts.
-- Post search and filters by source/date/status.
-- Draft editing with `raw_text` plus `telegram_entities` JSON.
-- Media metadata operations for add, remove, reorder, and replace flows.
-- Publish task queue for Telegram Bot API text, photo, and media group publishing.
+## Текущее состояние Phase 1
 
-## API Notes
+Phase 1 покрывает первый рабочий цикл: вход, подключение источников, мониторинг постов, редактирование черновиков, работа с медиа-метаданными и постановка публикации в очередь.
 
-During MVP development, authenticated API routes use `X-User-ID` when provided. If it is missing, the API creates and uses a development user. This keeps the data model tenant-ready while allowing local development before session management is added.
-
-Important endpoints:
-
-- `POST /api/auth/telegram`
-- `GET /api/sources`
-- `POST /api/sources`
-- `GET /api/posts`
-- `PATCH /api/posts/:id/draft`
-- `POST /api/posts/ingest`
-- `POST /api/publish_tasks`
-
-## Worker Notes
-
-The worker uses one technical Telegram account for public-channel monitoring. Configure:
-
-- `TELEGRAM_API_ID`
-- `TELEGRAM_API_HASH`
-- `TELEGRAM_WORKER_SESSION`
-- `TELEGRAM_BOT_TOKEN`
-
-The first Telethon session authorization is interactive when run locally. For production, create the session file once and mount it into the worker container.
+Следующие крупные этапы описаны в [ROADMAP.md](ROADMAP.md): отложенные публикации, кросс-постинг, история изменений, теги, AI-функции и SaaS-hardening.
