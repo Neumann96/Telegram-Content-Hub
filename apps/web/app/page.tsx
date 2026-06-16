@@ -64,7 +64,7 @@ const panels = [
   { id: "editor", label: "Редактор", icon: Edit3 },
 ] as const;
 const botOverrideKey = "telegram-content-hub-login-bot";
-const fallbackLoginBot = "pasechnikov_bot";
+const fallbackLoginBot = "asd20342bot";
 
 type Panel = (typeof panels)[number]["id"];
 type FormatAction = "bold" | "italic" | "underline" | "strike" | "code" | "quote" | "spoiler" | "link";
