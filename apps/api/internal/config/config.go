@@ -17,6 +17,7 @@ type Config struct {
 	MinIOBucket          string
 	TelegramBotToken     string
 	TelegramLoginBotName string
+	WorkerToken          string
 	WebAllowedOrigins    []string
 }
 
@@ -32,6 +33,7 @@ func Load() Config {
 		MinIOBucket:          env("MINIO_BUCKET", "telegram-media"),
 		TelegramBotToken:     env("TELEGRAM_BOT_TOKEN", ""),
 		TelegramLoginBotName: env("TELEGRAM_LOGIN_BOT_USERNAME", ""),
+		WorkerToken:          env("WORKER_TOKEN", ""),
 		WebAllowedOrigins:    csvEnv("WEB_ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
 }

@@ -31,6 +31,13 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, cfg config.Config) {
 	router.GET("/api/bootstrap", server.bootstrap)
 
 	router.POST("/api/auth/telegram", server.telegramLogin)
+	worker := router.Group("/api/worker")
+	worker.Use(server.workerContext)
+	worker.GET("/sources", server.workerListSources)
+	worker.PATCH("/sources/:id", server.workerUpdateSource)
+	worker.POST("/posts/ingest", server.workerIngestPost)
+	worker.GET("/publish_tasks/next", server.workerNextPublishTask)
+	worker.PATCH("/publish_tasks/:id", server.workerUpdatePublishTask)
 
 	api := router.Group("/api")
 	api.Use(server.userContext)
@@ -212,6 +219,18 @@ func currentUserID(ctx *gin.Context) uuid.UUID {
 	return ctx.MustGet("user_id").(uuid.UUID)
 }
 
+func (s Server) workerContext(ctx *gin.Context) {
+	if s.cfg.WorkerToken == "" {
+		ctx.Next()
+		return
+	}
+	if ctx.GetHeader("X-Worker-Token") != s.cfg.WorkerToken {
+		ctx.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid worker token"})
+		return
+	}
+	ctx.Next()
+}
+
 type sourceRequest struct {
 	Username          string `json:"username"`
 	Title             string `json:"title"`
@@ -223,6 +242,15 @@ type sourceRequest struct {
 func (s Server) listSources(ctx *gin.Context) {
 	var sources []models.Source
 	if err := s.db.Where("user_id = ?", currentUserID(ctx)).Order("created_at DESC").Find(&sources).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"sources": sources})
+}
+
+func (s Server) workerListSources(ctx *gin.Context) {
+	var sources []models.Source
+	if err := s.db.Where("is_active = ?", true).Order("created_at DESC").Find(&sources).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -278,6 +306,32 @@ func (s Server) updateSource(ctx *gin.Context) {
 		"updated_at":          time.Now().UTC(),
 	}
 	if err := s.db.Model(&models.Source{}).Where("id = ? AND user_id = ?", id, currentUserID(ctx)).Updates(updates).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (s Server) workerUpdateSource(ctx *gin.Context) {
+	id, err := uuid.Parse(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid source id"})
+		return
+	}
+	var req sourceRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	updates := map[string]any{
+		"title":               req.Title,
+		"description":         req.Description,
+		"telegram_channel_id": req.TelegramChannelID,
+		"last_message_id":     req.LastMessageID,
+		"checked_at":          time.Now().UTC(),
+		"updated_at":          time.Now().UTC(),
+	}
+	if err := s.db.Model(&models.Source{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -468,6 +522,50 @@ func (s Server) ingestPost(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"post": post})
 }
 
+func (s Server) workerIngestPost(ctx *gin.Context) {
+	var req ingestPostRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.TelegramMessageID == 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "telegram_message_id is required"})
+		return
+	}
+	source, err := s.findWorkerSource(req.SourceID, req.SourceUsername)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "source not found"})
+		return
+	}
+
+	entities := req.TelegramEntities
+	if len(entities) == 0 {
+		entities = json.RawMessage("[]")
+	}
+	post := models.Post{
+		UserID:            source.UserID,
+		SourceID:          source.ID,
+		TelegramMessageID: req.TelegramMessageID,
+		RawText:           req.RawText,
+		TelegramEntities:  entities,
+		Status:            models.PostStatusNew,
+		PostedAt:          req.PostedAt,
+	}
+	err = s.db.Where("source_id = ? AND telegram_message_id = ?", source.ID, req.TelegramMessageID).Assign(post).FirstOrCreate(&post).Error
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	for _, media := range req.Media {
+		media.PostID = post.ID
+		_, _ = s.createMediaRecordForUser(source.UserID, media)
+	}
+	if source.LastMessageID == nil || req.TelegramMessageID > *source.LastMessageID {
+		s.db.Model(&source).Updates(map[string]any{"last_message_id": req.TelegramMessageID, "updated_at": time.Now().UTC()})
+	}
+	ctx.JSON(http.StatusOK, gin.H{"post": post})
+}
+
 func (s Server) findSource(ctx *gin.Context, sourceID *uuid.UUID, username string) (models.Source, error) {
 	var source models.Source
 	query := s.db.Where("user_id = ?", currentUserID(ctx))
@@ -475,6 +573,14 @@ func (s Server) findSource(ctx *gin.Context, sourceID *uuid.UUID, username strin
 		return source, query.Where("id = ?", *sourceID).First(&source).Error
 	}
 	return source, query.Where("username = ?", normalizeUsername(username)).First(&source).Error
+}
+
+func (s Server) findWorkerSource(sourceID *uuid.UUID, username string) (models.Source, error) {
+	var source models.Source
+	if sourceID != nil {
+		return source, s.db.Where("id = ?", *sourceID).First(&source).Error
+	}
+	return source, s.db.Where("username = ?", normalizeUsername(username)).First(&source).Error
 }
 
 type mediaRequest struct {
@@ -513,8 +619,12 @@ func (s Server) createMedia(ctx *gin.Context) {
 }
 
 func (s Server) createMediaRecord(ctx *gin.Context, req mediaRequest) (models.Media, error) {
+	return s.createMediaRecordForUser(currentUserID(ctx), req)
+}
+
+func (s Server) createMediaRecordForUser(userID uuid.UUID, req mediaRequest) (models.Media, error) {
 	media := models.Media{
-		UserID:         currentUserID(ctx),
+		UserID:         userID,
 		PostID:         req.PostID,
 		Kind:           fallback(req.Kind, "photo"),
 		StorageURL:     req.StorageURL,
@@ -661,6 +771,40 @@ func (s Server) nextPublishTask(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"publish_task": publishTaskResponse{PublishTask: task, Post: post, Media: media}})
 }
 
+func (s Server) workerNextPublishTask(ctx *gin.Context) {
+	var task models.PublishTask
+	err := s.db.Where(
+		"status = ? AND (scheduled_at IS NULL OR scheduled_at <= ?)",
+		"queued",
+		time.Now().UTC(),
+	).Order("created_at ASC").First(&task).Error
+	if err == gorm.ErrRecordNotFound {
+		ctx.JSON(http.StatusOK, gin.H{"publish_task": nil})
+		return
+	}
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := s.db.Model(&task).Updates(map[string]any{"status": "processing", "updated_at": time.Now().UTC()}).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var post models.Post
+	if err := s.db.Where("id = ? AND user_id = ?", task.PostID, task.UserID).First(&post).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var media []models.Media
+	if err := s.db.Where("post_id = ? AND user_id = ?", task.PostID, task.UserID).Order("sort_order ASC").Find(&media).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"publish_task": publishTaskResponse{PublishTask: task, Post: post, Media: media}})
+}
+
 type updatePublishTaskRequest struct {
 	Status       string `json:"status"`
 	BotMessageID *int64 `json:"bot_message_id"`
@@ -695,6 +839,43 @@ func (s Server) updatePublishTask(ctx *gin.Context) {
 		var task models.PublishTask
 		if err := s.db.Where("id = ? AND user_id = ?", id, currentUserID(ctx)).First(&task).Error; err == nil {
 			_ = s.db.Model(&models.Post{}).Where("id = ? AND user_id = ?", task.PostID, currentUserID(ctx)).Updates(map[string]any{
+				"status":       models.PostStatusPublished,
+				"published_at": time.Now().UTC(),
+				"updated_at":   time.Now().UTC(),
+			}).Error
+		}
+	}
+	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func (s Server) workerUpdatePublishTask(ctx *gin.Context) {
+	id, err := uuid.Parse(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid publish task id"})
+		return
+	}
+	var req updatePublishTaskRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	updates := map[string]any{
+		"status":         fallback(req.Status, "queued"),
+		"bot_message_id": req.BotMessageID,
+		"error_message":  req.ErrorMessage,
+		"updated_at":     time.Now().UTC(),
+	}
+	if req.Status == "completed" {
+		updates["published_at"] = time.Now().UTC()
+	}
+	if err := s.db.Model(&models.PublishTask{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Status == "completed" {
+		var task models.PublishTask
+		if err := s.db.Where("id = ?", id).First(&task).Error; err == nil {
+			_ = s.db.Model(&models.Post{}).Where("id = ? AND user_id = ?", task.PostID, task.UserID).Updates(map[string]any{
 				"status":       models.PostStatusPublished,
 				"published_at": time.Now().UTC(),
 				"updated_at":   time.Now().UTC(),

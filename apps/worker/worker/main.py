@@ -14,6 +14,8 @@ logger = logging.getLogger("telegram-worker")
 
 
 def api_headers() -> dict[str, str]:
+    if settings.worker_token:
+        return {"X-Worker-Token": settings.worker_token}
     if settings.api_user_id:
         return {"X-User-ID": settings.api_user_id}
     return {}
@@ -41,7 +43,7 @@ def serialize_entities(message: Message) -> list[dict[str, Any]]:
     return entities
 
 
-def serialize_message(channel_username: str, message: Message) -> dict[str, Any]:
+def serialize_message(source_id: str, channel_username: str, message: Message) -> dict[str, Any]:
     media = []
     if message.photo:
         media.append(
@@ -53,6 +55,7 @@ def serialize_message(channel_username: str, message: Message) -> dict[str, Any]
         )
 
     return {
+        "source_id": source_id,
         "source_username": channel_username,
         "telegram_message_id": message.id,
         "raw_text": message.raw_text or "",
@@ -63,15 +66,15 @@ def serialize_message(channel_username: str, message: Message) -> dict[str, Any]
 
 
 async def get_sources(client: httpx.AsyncClient) -> list[dict[str, Any]]:
-    response = await client.get(f"{settings.api_base_url}/api/sources", headers=api_headers())
+    response = await client.get(f"{settings.api_base_url}/api/worker/sources", headers=api_headers())
     response.raise_for_status()
     return response.json().get("sources", [])
 
 
-async def ingest_message(client: httpx.AsyncClient, channel_username: str, message: Message) -> None:
-    payload = serialize_message(channel_username, message)
+async def ingest_message(client: httpx.AsyncClient, source: dict[str, Any], message: Message) -> None:
+    payload = serialize_message(source["id"], source["username"], message)
     response = await client.post(
-        f"{settings.api_base_url}/api/posts/ingest",
+        f"{settings.api_base_url}/api/worker/posts/ingest",
         headers=api_headers(),
         json=payload,
     )
@@ -88,7 +91,7 @@ async def refresh_source_metadata(client: httpx.AsyncClient, telegram: TelegramC
         "last_message_id": source.get("last_message_id"),
     }
     response = await client.patch(
-        f"{settings.api_base_url}/api/sources/{source['id']}",
+        f"{settings.api_base_url}/api/worker/sources/{source['id']}",
         headers=api_headers(),
         json=payload,
     )
@@ -110,7 +113,7 @@ async def monitor_sources(telegram: TelegramClient) -> None:
                         if message.id and (message.raw_text or message.media):
                             messages.append(message)
                     for message in reversed(messages):
-                        await ingest_message(client, username, message)
+                        await ingest_message(client, source, message)
                     if messages:
                         logger.info("Ingested %s messages from %s", len(messages), username)
             except Exception:
@@ -185,7 +188,7 @@ async def process_publish_queue() -> None:
     async with httpx.AsyncClient(timeout=30) as client:
         while True:
             try:
-                response = await client.get(f"{settings.api_base_url}/api/publish_tasks/next", headers=api_headers())
+                response = await client.get(f"{settings.api_base_url}/api/worker/publish_tasks/next", headers=api_headers())
                 response.raise_for_status()
                 task = response.json().get("publish_task")
                 if not task:
@@ -198,7 +201,7 @@ async def process_publish_queue() -> None:
                     logger.exception("Publish task failed")
                     status_payload = {"status": "failed", "error_message": str(exc)}
                 await client.patch(
-                    f"{settings.api_base_url}/api/publish_tasks/{task['id']}",
+                    f"{settings.api_base_url}/api/worker/publish_tasks/{task['id']}",
                     headers=api_headers(),
                     json=status_payload,
                 )
