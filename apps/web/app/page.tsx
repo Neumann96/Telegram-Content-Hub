@@ -268,8 +268,8 @@ export default function Home() {
               key={panel.id}
               onClick={() => setActivePanel(panel.id)}
               className={cn(
-                "flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium text-muted-foreground",
-                activePanel === panel.id && "bg-muted text-foreground",
+                "flex h-10 items-center justify-center gap-2 rounded-lg border border-transparent text-sm font-medium text-muted-foreground transition-[background-color,border-color,color,transform] duration-200 ease-out active:scale-[0.98]",
+                activePanel === panel.id && "border-primary/60 bg-primary/10 text-primary",
               )}
             >
               <Icon className="h-4 w-4" />
@@ -328,7 +328,7 @@ export default function Home() {
               <Input className="pl-9" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
             </div>
             <select
-              className="h-10 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-[border-color,background-color,color] duration-200 ease-out hover:border-primary/55 focus:border-primary focus:ring-2 focus:ring-ring"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as Post["status"] | "")}
             >
@@ -346,13 +346,13 @@ export default function Home() {
                 key={post.id}
                 onClick={() => selectPost(post.id)}
                 className={cn(
-                  "w-full rounded-md border bg-card p-3 text-left hover:border-primary",
-                  selectedPost?.id === post.id && "border-primary",
+                  "w-full rounded-lg border bg-card p-3 text-left transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-primary/70 hover:bg-muted/70 active:scale-[0.99]",
+                  selectedPost?.id === post.id && "border-primary bg-primary/10",
                 )}
               >
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <span className="line-clamp-2 min-w-0 text-sm font-medium">{post.edited_text || post.raw_text || "Медиа-пост"}</span>
-                  <span className="shrink-0 rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">{post.status}</span>
+                  <span className="shrink-0 rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-xs text-primary">{post.status}</span>
                 </div>
                 <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
                   <span>{post.source_username}</span>
@@ -361,7 +361,7 @@ export default function Home() {
               </button>
             ))}
             {!posts.isLoading && (posts.data?.posts ?? []).length === 0 && (
-              <div className="rounded-md border bg-card p-4 text-sm text-muted-foreground">Постов пока нет</div>
+              <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">Постов пока нет</div>
             )}
           </div>
         </section>
@@ -375,7 +375,7 @@ export default function Home() {
                   <p className="text-xs text-muted-foreground">{selectedPost.source_username}</p>
                 </div>
                 <select
-                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  className="h-9 rounded-lg border border-input bg-background px-2 text-sm outline-none transition-[border-color,background-color,color] duration-200 ease-out hover:border-primary/55 focus:border-primary focus:ring-2 focus:ring-ring"
                   value={draftStatus}
                   onChange={(event) => setDraftStatus(event.target.value as Post["status"])}
                 >
@@ -389,7 +389,7 @@ export default function Home() {
 
               <textarea
                 ref={textareaRef}
-                className="h-56 w-full resize-y rounded-md border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-ring sm:resize-none"
+                className="h-56 w-full resize-y rounded-lg border border-input bg-background p-3 text-sm outline-none transition-[border-color,background-color,color] duration-200 ease-out placeholder:text-muted-foreground hover:border-primary/55 focus:border-primary focus:ring-2 focus:ring-ring sm:resize-none"
                 value={draftText}
                 onChange={(event) => setDraftText(event.target.value)}
               />
@@ -405,7 +405,7 @@ export default function Home() {
                 <ToolbarButton label="Ссылка" onClick={() => applyFormat("link")} icon={Link} />
               </div>
 
-              <div className="mt-4 rounded-md border bg-background p-3">
+              <div className="mt-4 rounded-lg border bg-background p-3">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <span className="text-sm font-medium">Изображения</span>
                   <span className="text-xs text-muted-foreground">{selectedPost.media.length}</span>
@@ -418,7 +418,7 @@ export default function Home() {
                   }}
                 >
                   <select
-                    className="h-10 rounded-md border bg-background px-2 text-sm"
+                    className="h-10 rounded-lg border border-input bg-background px-2 text-sm outline-none transition-[border-color,background-color,color] duration-200 ease-out hover:border-primary/55 focus:border-primary focus:ring-2 focus:ring-ring"
                     value={newMediaKind}
                     onChange={(event) => setNewMediaKind(event.target.value)}
                   >
@@ -434,7 +434,7 @@ export default function Home() {
                 </form>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {[...selectedPost.media].sort((left, right) => left.sort_order - right.sort_order).map((item) => (
-                    <div key={item.id} className="rounded-md border bg-muted p-2 text-xs">
+                    <div key={item.id} className="rounded-lg border bg-muted p-2 text-xs">
                       <div className="mb-2 flex items-start justify-between gap-2">
                         <button className="min-w-0 text-left" type="button" onClick={() => replaceMedia(item)}>
                           <span className="block font-medium">{item.kind}</span>
@@ -465,7 +465,7 @@ export default function Home() {
               </div>
             </>
           ) : (
-            <div className="flex min-h-60 items-center justify-center rounded-md border bg-background text-sm text-muted-foreground">
+            <div className="flex min-h-60 items-center justify-center rounded-lg border bg-background text-sm text-muted-foreground">
               Нет выбранного поста
             </div>
           )}
@@ -531,7 +531,7 @@ function AuthPanel({
   if (user) {
     const displayName = user.first_name || user.username || "Telegram";
     return (
-      <div className="flex items-center gap-2 rounded-md border bg-background px-2 py-1">
+      <div className="flex items-center gap-2 rounded-lg border bg-background px-2 py-1">
         {user.photo_url ? <img className="h-7 w-7 rounded-full" src={user.photo_url} alt="" /> : <LogIn className="h-4 w-4 text-muted-foreground" />}
         <span className="max-w-32 truncate text-sm">{displayName}</span>
         <Button variant="outline" size="icon" aria-label="Выйти" onClick={onLogout}>
@@ -560,7 +560,7 @@ function AuthPanel({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex min-h-9 items-center gap-2 rounded-md border bg-background px-2">
+      <div className="flex min-h-9 items-center gap-2 rounded-lg border bg-background px-2">
         <div ref={containerRef} className={cn("flex items-center", isLoading && "pointer-events-none opacity-60")} />
         {!serverBotName ? (
           <Button variant="outline" size="sm" onClick={() => onSaveBotOverride("")}>
@@ -589,8 +589,8 @@ function ChannelButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm hover:bg-muted",
-        active ? "border-primary bg-muted" : "bg-card",
+        "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-primary/60 hover:bg-muted/80 active:scale-[0.98]",
+        active ? "border-primary bg-primary/10 text-primary" : "bg-card",
       )}
     >
       <span className="line-clamp-1 min-w-0">{source.title || source.username}</span>
