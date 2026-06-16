@@ -136,6 +136,8 @@ jobs:
             env_path.write_text("\n".join(f"{key}={values.get(key, '')}" for key in order) + "\n")
             PY
 
+            docker system prune -af
+            docker builder prune -af
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub pull api web worker
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub up -d postgres minio createbuckets api web worker
             docker compose -f compose.prod.yaml --env-file .env -p telegram-content-hub ps
