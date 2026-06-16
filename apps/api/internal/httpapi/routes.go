@@ -69,7 +69,11 @@ func (s Server) health(ctx *gin.Context) {
 func (s Server) bootstrap(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"telegram_login_bot": s.cfg.TelegramLoginBotName,
-		"minio_bucket":       s.cfg.MinIOBucket,
+		"auth": gin.H{
+			"telegram_login_bot_configured": s.cfg.TelegramLoginBotName != "",
+			"telegram_bot_token_configured": s.cfg.TelegramBotToken != "",
+		},
+		"minio_bucket": s.cfg.MinIOBucket,
 		"features": []string{
 			"telegram_login",
 			"source_channels",
@@ -98,6 +102,14 @@ func (s Server) telegramLogin(ctx *gin.Context) {
 	}
 	if req.ID == 0 {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "telegram id is required"})
+		return
+	}
+	if req.AuthDate == 0 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "auth_date is required"})
+		return
+	}
+	if time.Since(time.Unix(req.AuthDate, 0)) > 24*time.Hour {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "telegram login payload expired"})
 		return
 	}
 	if s.cfg.TelegramBotToken != "" && !validTelegramLogin(req, s.cfg.TelegramBotToken) {
@@ -484,6 +496,14 @@ func (s Server) createMedia(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if req.PostID == uuid.Nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "post_id is required"})
+		return
+	}
+	if strings.TrimSpace(req.StorageURL) == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "storage_url is required"})
+		return
+	}
 	media, err := s.createMediaRecord(ctx, req)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -520,19 +540,29 @@ func (s Server) updateMedia(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	updates := map[string]any{
-		"storage_url":   req.StorageURL,
-		"thumbnail_url": req.ThumbnailURL,
-		"mime_type":     req.MimeType,
-		"file_size":     req.FileSize,
-		"width":         req.Width,
-		"height":        req.Height,
-		"sort_order":    req.SortOrder,
-		"updated_at":    time.Now().UTC(),
-	}
+	updates := map[string]any{"updated_at": time.Now().UTC()}
 	if req.Kind != "" {
 		updates["kind"] = req.Kind
 	}
+	if req.StorageURL != "" {
+		updates["storage_url"] = req.StorageURL
+	}
+	if req.ThumbnailURL != "" {
+		updates["thumbnail_url"] = req.ThumbnailURL
+	}
+	if req.MimeType != "" {
+		updates["mime_type"] = req.MimeType
+	}
+	if req.FileSize > 0 {
+		updates["file_size"] = req.FileSize
+	}
+	if req.Width > 0 {
+		updates["width"] = req.Width
+	}
+	if req.Height > 0 {
+		updates["height"] = req.Height
+	}
+	updates["sort_order"] = req.SortOrder
 	if err := s.db.Model(&models.Media{}).Where("id = ? AND user_id = ?", id, currentUserID(ctx)).Updates(updates).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -565,10 +595,20 @@ func (s Server) createPublishTask(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	target := normalizeUsername(req.TargetChannelUsername)
+	if target == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "target_channel_username is required"})
+		return
+	}
+	var post models.Post
+	if err := s.db.Where("id = ? AND user_id = ?", req.PostID, currentUserID(ctx)).First(&post).Error; err != nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+		return
+	}
 	task := models.PublishTask{
 		UserID:                currentUserID(ctx),
 		PostID:                req.PostID,
-		TargetChannelUsername: normalizeUsername(req.TargetChannelUsername),
+		TargetChannelUsername: target,
 		Status:                "queued",
 		ScheduledAt:           req.ScheduledAt,
 	}
@@ -650,6 +690,16 @@ func (s Server) updatePublishTask(ctx *gin.Context) {
 	if err := s.db.Model(&models.PublishTask{}).Where("id = ? AND user_id = ?", id, currentUserID(ctx)).Updates(updates).Error; err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if req.Status == "completed" {
+		var task models.PublishTask
+		if err := s.db.Where("id = ? AND user_id = ?", id, currentUserID(ctx)).First(&task).Error; err == nil {
+			_ = s.db.Model(&models.Post{}).Where("id = ? AND user_id = ?", task.PostID, currentUserID(ctx)).Updates(map[string]any{
+				"status":       models.PostStatusPublished,
+				"published_at": time.Now().UTC(),
+				"updated_at":   time.Now().UTC(),
+			}).Error
+		}
 	}
 	ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 }

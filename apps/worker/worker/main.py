@@ -118,7 +118,34 @@ async def monitor_sources(telegram: TelegramClient) -> None:
             await asyncio.sleep(settings.poll_interval_seconds)
 
 
-async def send_publish_task(client: httpx.AsyncClient, task: dict[str, Any]) -> None:
+def bot_api_media_type(kind: str) -> str:
+    if kind in {"video", "document", "animation"}:
+        return kind
+    return "photo"
+
+
+def single_media_method(kind: str) -> tuple[str, str]:
+    if kind == "video":
+        return "sendVideo", "video"
+    if kind == "document":
+        return "sendDocument", "document"
+    if kind == "animation":
+        return "sendAnimation", "animation"
+    return "sendPhoto", "photo"
+
+
+def extract_message_id(payload: dict[str, Any]) -> int | None:
+    result = payload.get("result")
+    if isinstance(result, list) and result:
+        first = result[0]
+        if isinstance(first, dict):
+            return first.get("message_id")
+    if isinstance(result, dict):
+        return result.get("message_id")
+    return None
+
+
+async def send_publish_task(client: httpx.AsyncClient, task: dict[str, Any]) -> int | None:
     if not settings.telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured")
 
@@ -131,7 +158,7 @@ async def send_publish_task(client: httpx.AsyncClient, task: dict[str, Any]) -> 
     if len(media) > 1:
         media_group = [
             {
-                "type": "photo",
+                "type": bot_api_media_type(item.get("kind", "photo")),
                 "media": item["storage_url"],
                 "caption": text if index == 0 else "",
                 "parse_mode": "MarkdownV2",
@@ -140,9 +167,10 @@ async def send_publish_task(client: httpx.AsyncClient, task: dict[str, Any]) -> 
         ]
         response = await client.post(f"{bot_api}/sendMediaGroup", json={"chat_id": target, "media": media_group})
     elif len(media) == 1:
+        method, field_name = single_media_method(media[0].get("kind", "photo"))
         response = await client.post(
-            f"{bot_api}/sendPhoto",
-            json={"chat_id": target, "photo": media[0]["storage_url"], "caption": text, "parse_mode": "MarkdownV2"},
+            f"{bot_api}/{method}",
+            json={"chat_id": target, field_name: media[0]["storage_url"], "caption": text, "parse_mode": "MarkdownV2"},
         )
     else:
         response = await client.post(
@@ -150,6 +178,7 @@ async def send_publish_task(client: httpx.AsyncClient, task: dict[str, Any]) -> 
             json={"chat_id": target, "text": text, "parse_mode": "MarkdownV2"},
         )
     response.raise_for_status()
+    return extract_message_id(response.json())
 
 
 async def process_publish_queue() -> None:
@@ -163,8 +192,8 @@ async def process_publish_queue() -> None:
                     await asyncio.sleep(settings.poll_interval_seconds)
                     continue
                 try:
-                    await send_publish_task(client, task)
-                    status_payload = {"status": "completed", "error_message": ""}
+                    message_id = await send_publish_task(client, task)
+                    status_payload = {"status": "completed", "error_message": "", "bot_message_id": message_id}
                 except Exception as exc:
                     logger.exception("Publish task failed")
                     status_payload = {"status": "failed", "error_message": str(exc)}

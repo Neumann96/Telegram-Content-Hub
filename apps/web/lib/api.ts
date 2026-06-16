@@ -12,6 +12,11 @@ export type Media = {
   post_id: string;
   kind: string;
   storage_url: string;
+  thumbnail_url?: string;
+  mime_type?: string;
+  file_size?: number;
+  width?: number;
+  height?: number;
   sort_order: number;
 };
 
@@ -30,6 +35,10 @@ export type Post = {
 
 export type Bootstrap = {
   telegram_login_bot: string;
+  auth: {
+    telegram_login_bot_configured: boolean;
+    telegram_bot_token_configured: boolean;
+  };
   minio_bucket: string;
   features: string[];
 };
@@ -139,5 +148,38 @@ export function createPublishTask(postId: string, targetChannelUsername: string)
   return request<{ publish_task: unknown }>("/api/publish_tasks", {
     method: "POST",
     body: JSON.stringify({ post_id: postId, target_channel_username: targetChannelUsername }),
+  });
+}
+
+export type MediaPayload = {
+  post_id: string;
+  kind: string;
+  storage_url: string;
+  thumbnail_url?: string;
+  mime_type?: string;
+  file_size?: number;
+  width?: number;
+  height?: number;
+  sort_order: number;
+  telegram_file_id?: string;
+};
+
+export function createMedia(payload: MediaPayload) {
+  return request<{ media: Media }>("/api/media", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateMedia(mediaId: string, payload: Partial<MediaPayload>) {
+  return request<{ status: string }>(`/api/media/${mediaId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteMedia(mediaId: string) {
+  return request<{ status: string }>(`/api/media/${mediaId}`, {
+    method: "DELETE",
   });
 }
