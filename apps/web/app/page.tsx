@@ -5,6 +5,9 @@ import {
   ArrowUp,
   Bold,
   CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Code2,
   Edit3,
   ImagePlus,
@@ -22,7 +25,7 @@ import {
   Trash2,
   Underline,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -58,6 +61,15 @@ declare global {
 
 const statuses: Array<Post["status"] | ""> = ["", "new", "editing", "ready", "published", "archived"];
 const editorStatuses: Post["status"][] = ["new", "editing", "ready", "published", "archived"];
+const statusLabels: Record<Post["status"] | "", string> = {
+  "": "Все статусы",
+  new: "Новые",
+  editing: "В работе",
+  ready: "Готово",
+  published: "Опубликовано",
+  archived: "Архив",
+};
+const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const panels = [
   { id: "sources", label: "Каналы", icon: ListFilter },
   { id: "posts", label: "Посты", icon: MessageCircle },
@@ -318,26 +330,13 @@ export default function Home() {
         </aside>
 
         <section className={cn("border-r p-4", activePanel !== "posts" && "hidden lg:block")}>
-          <div className="mb-4 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_135px_145px]">
+          <div className="mb-4 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_180px_170px]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск" />
             </div>
-            <div className="relative">
-              <CalendarDays className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-            </div>
-            <select
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-[border-color,background-color,color] duration-200 ease-out hover:border-primary/55 focus:border-primary focus:ring-2 focus:ring-ring"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as Post["status"] | "")}
-            >
-              {statuses.map((status) => (
-                <option key={status || "all"} value={status}>
-                  {status || "Все статусы"}
-                </option>
-              ))}
-            </select>
+            <DateFilter value={dateFrom} onChange={setDateFrom} />
+            <StatusFilter value={statusFilter} onChange={setStatusFilter} />
           </div>
 
           <div className="space-y-2">
@@ -472,6 +471,186 @@ export default function Home() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function DateFilter({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selectedDate = parseInputDate(value);
+  const [isOpen, setIsOpen] = useState(false);
+  const [viewDate, setViewDate] = useState(() => selectedDate ?? new Date());
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const monthLabel = viewDate.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+  const days = getCalendarDays(year, month);
+
+  useEffect(() => {
+    if (selectedDate) {
+      setViewDate(selectedDate);
+    }
+  }, [value]);
+
+  useOutsidePointerDown(rootRef, () => setIsOpen(false));
+
+  function moveMonth(direction: -1 | 1) {
+    setViewDate(new Date(year, month + direction, 1));
+  }
+
+  function selectDate(date: Date) {
+    onChange(formatInputDate(date));
+    setViewDate(date);
+    setIsOpen(false);
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        className={cn(
+          "flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-left text-sm outline-none transition-[background-color,border-color,color] duration-200 ease-out hover:border-primary/55 focus-visible:border-primary/55",
+          isOpen && "border-primary/55",
+        )}
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className={cn("truncate", !value && "text-muted-foreground")}>{selectedDate ? selectedDate.toLocaleDateString("ru-RU") : "Дата"}</span>
+        </span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen ? (
+        <div className="absolute right-0 top-12 z-20 w-72 rounded-xl border bg-card p-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/35 bg-background text-muted-foreground transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-primary/60 hover:bg-primary/10 hover:text-primary active:scale-[0.96]"
+              onClick={() => moveMonth(-1)}
+              aria-label="Предыдущий месяц"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-0 truncate text-sm font-medium capitalize">{monthLabel}</span>
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/35 bg-background text-muted-foreground transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-primary/60 hover:bg-primary/10 hover:text-primary active:scale-[0.96]"
+              onClick={() => moveMonth(1)}
+              aria-label="Следующий месяц"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground">
+            {weekDays.map((day) => (
+              <span key={day} className="py-1">
+                {day}
+              </span>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {days.map((day) => {
+              const isSelected = value === formatInputDate(day.date);
+              const isToday = isSameDate(day.date, new Date());
+              return (
+                <button
+                  key={day.key}
+                  type="button"
+                  className={cn(
+                    "flex h-8 items-center justify-center rounded-lg border border-transparent text-xs transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-primary/50 hover:bg-primary/10 hover:text-primary active:scale-[0.94]",
+                    !day.isCurrentMonth && "text-muted-foreground/50",
+                    isToday && "border-primary/30 text-primary",
+                    isSelected && "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+                  )}
+                  onClick={() => selectDate(day.date)}
+                >
+                  {day.date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              className="h-9 rounded-lg border border-primary/35 bg-background px-3 text-sm text-muted-foreground transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-primary/60 hover:bg-primary/10 hover:text-primary active:scale-[0.98]"
+              onClick={() => {
+                onChange(formatInputDate(new Date()));
+                setViewDate(new Date());
+                setIsOpen(false);
+              }}
+            >
+              Сегодня
+            </button>
+            <button
+              type="button"
+              className="h-9 rounded-lg border border-primary/35 bg-background px-3 text-sm text-muted-foreground transition-[background-color,border-color,color,transform] duration-200 ease-out hover:border-primary/60 hover:bg-primary/10 hover:text-primary active:scale-[0.98]"
+              onClick={() => {
+                onChange("");
+                setIsOpen(false);
+              }}
+            >
+              Сбросить
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusFilter({
+  value,
+  onChange,
+}: {
+  value: Post["status"] | "";
+  onChange: (value: Post["status"] | "") => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useOutsidePointerDown(rootRef, () => setIsOpen(false));
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        className={cn(
+          "flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-input bg-background px-3 text-left text-sm outline-none transition-[background-color,border-color,color] duration-200 ease-out hover:border-primary/55 focus-visible:border-primary/55",
+          isOpen && "border-primary/55",
+        )}
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <span className={cn("truncate", !value && "text-muted-foreground")}>{statusLabels[value]}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen ? (
+        <div className="absolute right-0 top-12 z-20 w-full min-w-44 rounded-xl border bg-card p-1">
+          {statuses.map((status) => {
+            const isActive = status === value;
+            return (
+              <button
+                key={status || "all"}
+                type="button"
+                className={cn(
+                  "flex h-9 w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground transition-[background-color,color,transform] duration-200 ease-out hover:bg-primary/10 hover:text-primary active:scale-[0.98]",
+                  isActive && "bg-primary/10 text-primary",
+                )}
+                onClick={() => {
+                  onChange(status);
+                  setIsOpen(false);
+                }}
+              >
+                <span>{statusLabels[status]}</span>
+                {status ? <span className="text-xs opacity-70">{status}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -615,6 +794,52 @@ function ToolbarButton({
       {Icon ? <Icon className="h-4 w-4" /> : <span className="text-xs font-semibold">{text}</span>}
     </Button>
   );
+}
+
+function useOutsidePointerDown<T extends HTMLElement>(ref: RefObject<T | null>, onOutside: () => void) {
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      const element = ref.current;
+      if (!element || !(event.target instanceof Node) || element.contains(event.target)) return;
+      onOutside();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [onOutside, ref]);
+}
+
+function parseInputDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function formatInputDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getCalendarDays(year: number, month: number) {
+  const firstDay = new Date(year, month, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(year, month, index - startOffset + 1);
+    return {
+      key: formatInputDate(date),
+      date,
+      isCurrentMonth: date.getMonth() === month,
+    };
+  });
+}
+
+function isSameDate(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
 }
 
 function nextMediaOrder(media: Media[]) {
